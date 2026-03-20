@@ -19,6 +19,25 @@
     "./cli": "./cli.js",
     "./browser": "./browser.js"
   },
+  "scripts": {
+    "test": "echo \"no test specified\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asakuraminani/unrpyc-pure.git"
+  },
+  "keywords": [
+    "renpy",
+    "rpyc",
+    "decompiler",
+    "unrpyc"
+  ],
+  "author": "あさくらみなみ",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/asakuraminani/unrpyc-pure/issues"
+  },
+  "homepage": "https://github.com/asakuraminani/unrpyc-pure",
   "dependencies": {
     "pickleparser": "^0.2.1",
     "fflate": "^0.8.2"

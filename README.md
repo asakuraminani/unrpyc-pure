@@ -4,6 +4,8 @@ UnrpycPure is a pure JavaScript Ren'Py `.rpyc` decompiler.
 
 Unlike some similar tools, this package does not run the Python version in the browser.
 
+If you want to preview RPA online, go [RPA-Explorer](https://github.com/asakuraminani/RPA-Explorer).
+
 ## Features
 
 - Decompile a single `.rpyc` file or an entire directory

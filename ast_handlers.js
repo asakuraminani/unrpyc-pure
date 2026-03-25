@@ -167,7 +167,7 @@ export class Decompiler extends DecompilerBase {
         for (const m of this.blank_line_queue) {
             m(null);
         }
-        this.write("\n# Decompiled by unrpyc: https://github.com/CensoredUsername/unrpyc\n");
+        this.write("\n# Decompiled by unrpyc: https://github.com/asakuraminani/unrpyc-pure\n");
         if (this.missing_init) {
             throw new Error("A required init, init label, or translate block was missing");
         }

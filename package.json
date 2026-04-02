@@ -1,6 +1,6 @@
 {
   "name": "unrpyc-pure",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Pure JS Ren'Py .rpyc decompiler with npm CLI and JS API",
   "type": "module",
   "files": [
@@ -8,7 +8,7 @@
     "README.md"
   ],
   "bin": {
-    "unrpyc": "./cli.js"
+    "unrpyc": "cli.js"
   },
   "exports": {
     ".": {

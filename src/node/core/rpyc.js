@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, statSync, readdirSync, mkdirSync, existsSync } from 'fs';
-import { resolve, join, dirname, relative } from 'path';
+import { resolve, join, dirname, relative, basename } from 'path';
 
-import { createOutputFromBuffer, normalizeOperation } from './pipeline.js';
+import { createOutputFromBuffer, normalizeOperation } from '../../lib/pipeline.js';
 
 const NOOP = () => {};
 
@@ -46,6 +46,20 @@ function getOutputExtension(operation) {
     return '.rpy';
 }
 
+export function isProcessableDirectoryEntry(filePath) {
+    return filePath.endsWith('.rpyc');
+}
+
+export function validateSingleFileInputPath(inputPath) {
+    if (!isProcessableDirectoryEntry(inputPath)) {
+        throw new Error(`Single-file input must be a .rpyc file: ${inputPath}`);
+    }
+}
+
+function replaceRpycExtension(filePath, extension) {
+    return filePath.replace(/\.rpyc$/, extension);
+}
+
 function describeOperation(operation) {
     if (operation.mode === 'translate' && operation.type === 'json') {
         return 'Generating translation JSON for';
@@ -58,22 +72,26 @@ function describeOperation(operation) {
     return 'Decompiling';
 }
 
-function validateSingleFileOutputPath(inputPath, outputPath, operation) {
+export function validateSingleFileOutputPath(inputPath, outputPath, operation) {
     const expectedExtension = getOutputExtension(operation);
 
     if (!outputPath.endsWith(expectedExtension)) {
         throw new Error(`Single-file ${operation.mode === 'translate' ? `${operation.type} translate` : 'decompile'} output must end with ${expectedExtension}`);
     }
 
-    if (existsSync(outputPath) && !statSync(outputPath).isFile()) {
-        throw new Error(`Output path exists and is not a file: ${outputPath}`);
+    if (existsSync(outputPath)) {
+        const outputStat = statSync(outputPath);
+        if (!outputStat.isFile()) {
+            throw new Error(`Output path exists and is not a file: ${outputPath}`);
+        }
+        throw new Error(`Output file already exists: ${outputPath}`);
     }
 }
 
 export function* traverse(root) {
     const stat = statSync(root);
     if (stat.isFile()) {
-        if (root.endsWith('.rpyc')) {
+        if (isProcessableDirectoryEntry(root)) {
             yield root;
         }
         return;
@@ -95,11 +113,9 @@ export function collectInputFiles(inputPath) {
     let isSingleFileInput = false;
 
     if (inputStat.isFile()) {
-        if (inputPath.endsWith('.rpyc')) {
-            filesToProcess = [inputPath];
-            inputBase = dirname(inputPath);
-            isSingleFileInput = true;
-        }
+        filesToProcess = [inputPath];
+        inputBase = dirname(inputPath);
+        isSingleFileInput = true;
     } else if (inputStat.isDirectory()) {
         filesToProcess = Array.from(traverse(inputPath));
     }
@@ -115,26 +131,45 @@ export function getOutputPath(filePath, inputBase, outputBase, operation, option
     const relativePath = relative(inputBase, filePath);
     const outputExtension = getOutputExtension(operation);
 
-    return join(outputBase, relativePath.replace(/\.rpyc$/, outputExtension));
+    return join(outputBase, replaceRpycExtension(relativePath, outputExtension));
 }
 
-function ensureOutputTarget(outputPath, isSingleFileInput) {
-    if (existsSync(outputPath)) {
-        const outputStat = statSync(outputPath);
+export function getDirectoryOutputRoot(inputPath, options = {}) {
+    return options.directoryOutputMode === 'implicit-final' ? null : basename(inputPath);
+}
 
-        if (isSingleFileInput) {
-            if (!outputStat.isFile()) {
-                throw new Error(`Output path exists and is not a file: ${outputPath}`);
-            }
-            return;
-        }
-
-        if (!outputStat.isDirectory()) {
-            throw new Error(`Output path exists and is not a directory: ${outputPath}`);
-        }
+export function validateDirectoryOutputPath(inputPath, outputPath, options = {}) {
+    if (!existsSync(outputPath)) {
         return;
     }
 
+    const outputStat = statSync(outputPath);
+    if (!outputStat.isDirectory()) {
+        throw new Error(`Output path exists and is not a directory: ${outputPath}`);
+    }
+
+    const directoryOutputRoot = getDirectoryOutputRoot(inputPath, options);
+    const directoryOutputPath = directoryOutputRoot ? join(outputPath, directoryOutputRoot) : outputPath;
+    if (existsSync(directoryOutputPath)) {
+        throw new Error(`Output directory already exists: ${directoryOutputPath}`);
+    }
+}
+
+export function validateOutputTarget(inputPath, outputPath, operation, options = {}) {
+    const { isSingleFileInput } = collectInputFiles(inputPath);
+
+    if (isSingleFileInput) {
+        validateSingleFileInputPath(inputPath);
+        validateSingleFileOutputPath(inputPath, outputPath, operation);
+        return { isSingleFileInput, directoryOutputRoot: null };
+    }
+
+    const directoryOutputRoot = getDirectoryOutputRoot(inputPath, options);
+    validateDirectoryOutputPath(inputPath, outputPath, options);
+    return { isSingleFileInput, directoryOutputRoot };
+}
+
+function ensureOutputTarget(outputPath, isSingleFileInput) {
     mkdirSync(isSingleFileInput ? dirname(outputPath) : outputPath, { recursive: true });
 }
 
@@ -189,22 +224,20 @@ export async function run(options = {}) {
         throw new Error(`Input path not found: ${inputPath}`);
     }
 
-    const { filesToProcess, inputBase, isSingleFileInput } = collectInputFiles(inputPath);
-
-    if (isSingleFileInput) {
-        validateSingleFileOutputPath(inputPath, outputPath, operation);
-    }
+    const { filesToProcess, inputBase } = collectInputFiles(inputPath);
+    const { isSingleFileInput, directoryOutputRoot } = validateOutputTarget(inputPath, outputPath, operation, options);
+    const outputBase = directoryOutputRoot ? join(outputPath, directoryOutputRoot) : outputPath;
 
     ensureOutputTarget(outputPath, isSingleFileInput);
 
     if (filesToProcess.length === 0) {
-        logger.info('No .rpyc files found to decompile.');
+        logger.info(`No ${describeOperation(operation).toLowerCase()} files found to process.`);
         return {
             mode: operation.mode,
             type: operation.type,
             language: operation.language,
             inputPath,
-            outputPath,
+            outputBase,
             inputBase,
             processedFiles: [],
             writtenFiles: [],
@@ -217,12 +250,13 @@ export async function run(options = {}) {
     const processedFiles = [];
     const writtenFiles = [];
     const errors = [];
+    const fileProcessor = options.processFile ?? processFile;
 
     for (const filePath of filesToProcess) {
         processedFiles.push(filePath);
 
         try {
-            const result = await processFile(filePath, inputBase, outputPath, {
+            const result = await fileProcessor(filePath, inputBase, outputBase, {
                 ...options,
                 mode: operation.mode,
                 type: operation.type,

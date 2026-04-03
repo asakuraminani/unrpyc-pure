@@ -1,26 +1,27 @@
 {
   "name": "unrpyc-pure",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Pure JS Ren'Py .rpyc decompiler with npm CLI and JS API",
   "type": "module",
   "files": [
-    "*.js",
-    "README.md"
+    "src/**/*.js",
+    "README.md",
+    "docs/**/*.md"
   ],
   "bin": {
-    "unrpyc": "cli.js"
+    "unrpyc": "src/node/cli.js"
   },
   "exports": {
     ".": {
-      "browser": "./browser.js",
-      "import": "./unrpyc.js",
-      "default": "./unrpyc.js"
+      "browser": "./src/browser.js",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
     },
-    "./cli": "./cli.js",
-    "./browser": "./browser.js"
+    "./cli": "./src/node/cli.js",
+    "./browser": "./src/browser.js"
   },
   "scripts": {
-    "test": "echo \"no test specified\" && exit 0"
+    "test": "node --test"
   },
   "repository": {
     "type": "git",
